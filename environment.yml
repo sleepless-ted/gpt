@@ -1,0 +1,21 @@
+name: gpt
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas=2.3.3
+  - ipykernel
+  - matplotlib
+  - seaborn
+  - scipy
+  - scikit-learn
+  - tqdm
+  - pytorch
+
+  - pip:
+      - datasets
+
+     
