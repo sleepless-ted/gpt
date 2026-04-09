@@ -3,8 +3,9 @@ from setup import GPTConfig, DATA_DIR
 from collections import Counter
 from tokenize_tools import tokenize, pattern
 
+vocab_size = int(GPTConfig.vocab_size)
 IN_FILE = os.path.join(DATA_DIR, 'input.txt')
-CLEANED_FILE = os.path.join(DATA_DIR, 'input_clean.txt')
+CLEANED_FILE = os.path.join(DATA_DIR, f'input_clean_{vocab_size}.txt')
 
 with open(IN_FILE, 'r', encoding='utf-8') as f:
     text = f.read()
@@ -13,7 +14,7 @@ tokens = tokenize(text, pattern)
 print(f"Found {len(tokens)} tokens, computing frequencies...")
 
 freq = Counter(tokens)
-most_common = [w for w, _ in freq.most_common(GPTConfig.vocab_size)]
+most_common = [w for w, _ in freq.most_common(vocab_size)]
 vocab = set(most_common)
 print(f"Keeping top {len(vocab)} tokens (most frequent).")
 

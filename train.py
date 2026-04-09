@@ -4,24 +4,19 @@ import setup
 from model import GPT
 
 
-def resolve_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
-
-
 def load_dataset(config):
-    input_file = os.path.join(setup.DATA_DIR, "input_clean.txt")
+    input_file = os.path.join(setup.DATA_DIR, "input_clean_50000.txt")
     with open(input_file, "r", encoding="utf-8") as f:
         tokens = f.read().split()
+        vocab = set(tokens)
+        print(f"Dataset loaded: {len(tokens)} tokens, {len(vocab)} unique")
 
     data_length = min(config.data_length, len(tokens))
     tokens = tokens[:data_length].copy()  # limit dataset size for faster training during development
-    unique_tokens = sorted(set(tokens))
-    words_to_ids = {word: i for i, word in enumerate(unique_tokens)}
+    words_to_ids = {word: i for i, word in enumerate(vocab)}
     ids_to_words = {i: word for word, i in words_to_ids.items()}
 
-    config.vocab_size = len(unique_tokens)
+    config.vocab_size = len(vocab)
     encoded = torch.tensor([words_to_ids[token] for token in tokens], dtype=torch.long, device=device)
 
     split_idx = int(len(encoded) * config.train_split)
@@ -88,7 +83,7 @@ def save_checkpoint(path, model, optimizer, gpt_config, training_config, words_t
 
 def main():
     global device
-    device = resolve_device()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     gpt_config = setup.GPTConfig()
     training_config = setup.TrainingConfig()
     
@@ -103,6 +98,7 @@ def main():
 
     print(f"Training on {device}")
     print(f"Vocabulary size: {gpt_config.vocab_size}")
+    print(f"Vocabulary size: {training_config.vocab_size}")
     print(f"Train tokens: {len(train_data)} | Validation tokens: {len(val_data)}")
 
     for step in range(training_config.steps):
