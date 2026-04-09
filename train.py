@@ -13,7 +13,8 @@ def load_dataset(config):
 
     data_length = min(config.data_length, len(tokens))
     tokens = tokens[:data_length].copy()  # limit dataset size for faster training during development
-    words_to_ids = {word: i for i, word in enumerate(vocab)}
+    sorted_vocab = sorted(vocab)
+    words_to_ids = {word: i for i, word in enumerate(sorted_vocab)}
     ids_to_words = {i: word for word, i in words_to_ids.items()}
 
     config.vocab_size = len(vocab)
@@ -88,6 +89,7 @@ def main():
     training_config = setup.TrainingConfig()
     
     train_data, val_data, words_to_ids, ids_to_words = load_dataset(training_config)
+    gpt_config.vocab_size = training_config.vocab_size
 
     model = GPT(gpt_config).to(device)
     optimizer = torch.optim.AdamW(
