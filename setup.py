@@ -7,16 +7,16 @@ device = 'cuda'
 
 class GPTConfig:
     vocab_size : int = 50000 # nombre de tokens à garder dans le vocabulaire (les plus fréquents)
-    embedding_dim : int = 32 * 12 # dimension de l'espace d'embedding
+    embedding_dim : int = 64 * 12 # dimension de l'espace d'embedding
     batch_size : int = 64
     context_length : int = 128 # nombre de tokens dans une séquence
     num_heads : int = 12
     head_dim = embedding_dim // num_heads
     dropout : float = 0.1
-    num_blocks : int = 5
+    num_blocks : int = 6
     
 class TrainingConfig:
-    data_length : int = 2000000 # nombre de tokens à utiliser pour l'entraînement   
+    data_length : int = 20000000 # nombre de tokens à utiliser pour l'entraînement   
     train_split : float = 0.9
     learning_rate : float = 3e-4
     weight_decay : float = 1e-2

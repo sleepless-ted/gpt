@@ -105,6 +105,9 @@ def main():
         if step % training_config.eval_interval == 0 or step == training_config.steps - 1:
             losses = estimate_loss(model, train_data, val_data, training_config, gpt_config)
             print(f"step {step}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+            prompt = torch.zeros((1, 1), dtype=torch.long, device=device)
+            generated = model.generate(prompt, max_new_tokens=200)[0].tolist()
+            print(decode_tokens(generated, ids_to_words))
 
         xb, yb = get_batch(train_data, gpt_config)
         _, loss = model(xb, yb)
