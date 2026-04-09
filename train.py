@@ -5,7 +5,7 @@ from model import GPT
 
 
 def load_dataset(config):
-    input_file = os.path.join(setup.DATA_DIR, "input_clean_50000.txt")
+    input_file = os.path.join(setup.DATA_DIR, "input_clean_20000.txt")
     with open(input_file, "r", encoding="utf-8") as f:
         tokens = f.read().split()
         vocab = set(tokens)
