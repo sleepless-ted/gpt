@@ -14,3 +14,12 @@ class GPTConfig:
     head_dim = embedding_dim // num_heads
     dropout : float = 0.1
     num_blocks : int = 4
+    
+class TrainingConfig:
+    train_split : float = 0.9
+    eval_iters : int = 200
+    learning_rate : float = 3e-4
+    weight_decay : float = 1e-2
+    steps : int = 1000
+    eval_interval : int = 100
+    checkpoint : str = "checkpoint.pt"

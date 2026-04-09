@@ -4,23 +4,6 @@ import torch.nn as nn
 import setup
 import math
 
-input_file = os.path.join(setup.DATA_DIR, "input_clean.txt")
-
-with open(input_file, 'r', encoding='utf-8') as f:
-    text = f.read()
-
-# input_clean.txt is a space-separated sequence of word tokens.
-tokens = text.split()
-unique_tokens = sorted(set(tokens))
-vocab_size = len(unique_tokens)
-
-words_to_ids = {word: i for i, word in enumerate(unique_tokens)}
-ids_to_words = {i: word for word, i in words_to_ids.items()}
-
-encode = [words_to_ids[token] for token in tokens]
-data = torch.tensor(encode, dtype=torch.long, device=setup.device)
-
-
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
