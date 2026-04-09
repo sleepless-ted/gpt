@@ -29,12 +29,42 @@ class GPT(nn.Module):
         self.word_token_embedding_table = nn.Embedding(config.vocab_size, config.embedding_dim, device=setup.device)
         # table d'embedding : context_length x embedding_dim. Pour la conversion de position en vecteur d'embedding
         self.word_position_embedding_table = nn.Embedding(config.context_length, config.embedding_dim, device=setup.device)
+        self.dropout_layer = nn.Dropout(config.dropout)
+        # stack des blocks
+        self.blocks = nn.ModuleList([Block(config) for _ in range(config.num_blocks)])
+        self.norm_layer = nn.LayerNorm(config.embedding_dim)
+        self.llm_projection_layer = nn.Linear(config.embedding_dim, config.vocab_size, bias=False)
+        # Decode words from the embedding space using the same weights as the token encoding table
+        self.llm_projection_layer.weight = self.word_token_embedding_table.weight
 
-    def forward(self, idx):
+    def forward(self, idx, targets=None):
         token_embeddings = self.word_token_embedding_table(idx)
         position_embeddings = self.word_position_embedding_table(torch.arange(idx.size(1), device=setup.device))
         X = token_embeddings + position_embeddings
-        return X
+        X = X.to(setup.device)
+        X = self.dropout_layer(X)
+        for block in self.blocks:
+            X = block(X)
+        X = self.norm_layer(X)
+        logits = self.llm_projection_layer(X)
+        loss = None
+        if targets is not None:
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
+    
+    @torch.inference_mode()
+    def generate(self, idx, max_new_tokens, temperature=1.0):
+        for _ in range(max_new_tokens):
+            # crop idx to the last context_length tokens
+            idx_crop = idx[:, -self.config.context_length:]
+            logits, _ = self(idx_crop)
+            # increasing temperature will make the model more "creative" by increasing the probability of less likely tokens
+            logits = logits[:, -1, :] / temperature
+            probs = nn.functional.softmax(logits, dim=-1)
+            # sample the next token from a miltinomial distribution
+            next_token = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, next_token), dim=1)
+        return idx
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):

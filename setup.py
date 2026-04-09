@@ -13,3 +13,4 @@ class GPTConfig:
     num_heads : int = 4
     head_dim = embedding_dim // num_heads
     dropout : float = 0.1
+    num_blocks : int = 4
