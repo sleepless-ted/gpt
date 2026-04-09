@@ -1,1 +1,4 @@
 *.txt
+.vscode/
+__pycache__/
+checkpoint.pt

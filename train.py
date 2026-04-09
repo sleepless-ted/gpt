@@ -1,9 +1,5 @@
-import argparse
 import os
-
-from networkx import config
 import torch
-
 import setup
 from model import GPT
 
@@ -19,7 +15,8 @@ def load_dataset(config):
     with open(input_file, "r", encoding="utf-8") as f:
         tokens = f.read().split()
 
-    tokens = tokens[:1000000].copy()  # limit dataset size for faster training during development
+    data_length = min(config.data_length, len(tokens))
+    tokens = tokens[:data_length].copy()  # limit dataset size for faster training during development
     unique_tokens = sorted(set(tokens))
     words_to_ids = {word: i for i, word in enumerate(unique_tokens)}
     ids_to_words = {i: word for word, i in words_to_ids.items()}
