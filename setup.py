@@ -10,3 +10,6 @@ class GPTConfig:
     embedding_dim : int = 128 # dimension de l'espace d'embedding
     batch_size : int = 64
     context_length : int = 1024 # nombre de tokens dans une séquence
+    num_heads : int = 4
+    head_dim = embedding_dim // num_heads
+    dropout : float = 0.1
