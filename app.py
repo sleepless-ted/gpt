@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import time
+from html import escape
 from functools import lru_cache
 from types import SimpleNamespace
 from typing import Any
@@ -192,6 +194,149 @@ def kv_cache_view(text: str, steps: int) -> tuple[pd.DataFrame, str]:
     )
 
 
+def _compact_number(value: int) -> str:
+    if value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.2f} Md"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f} M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f} k"
+    return str(value)
+
+
+def _architecture_values(
+    text: str,
+    num_layers: int,
+    num_heads: int,
+    head_dim: int,
+    context_length: int,
+) -> dict[str, Any]:
+    tokens = split_tokens(text)[: int(context_length)] or ["<vide>"]
+    layers = max(1, int(num_layers))
+    heads = max(1, int(num_heads))
+    dimension = max(8, int(head_dim))
+    context = max(1, int(context_length))
+    embedding_dim = heads * dimension
+    _, metadata, _ = load_model()
+    vocab_size = int(getattr(metadata["config"], "vocab_size", 50_000)) if metadata else 50_000
+    # Embeddings + positions + Transformer blocks + final LayerNorm.
+    # The output projection shares the token embedding weights in this repo.
+    block_parameters = layers * (12 * embedding_dim * embedding_dim + 9 * embedding_dim)
+    estimated_parameters = vocab_size * embedding_dim + context * embedding_dim + block_parameters + 2 * embedding_dim
+    return {
+        "tokens": tokens,
+        "layers": layers,
+        "heads": heads,
+        "head_dim": dimension,
+        "context": context,
+        "embedding_dim": embedding_dim,
+        "vocab_size": vocab_size,
+        "estimated_parameters": estimated_parameters,
+    }
+
+
+def architecture_view(
+    text: str,
+    num_layers: int,
+    num_heads: int,
+    head_dim: int,
+    context_length: int,
+) -> str:
+    values = _architecture_values(text, num_layers, num_heads, head_dim, context_length)
+    tokens = values["tokens"]
+    shown_tokens = tokens[:12]
+    token_html = "".join(f'<span class="arch-token">{escape(token)}</span>' for token in shown_tokens)
+    if len(tokens) > len(shown_tokens):
+        token_html += f'<span class="arch-token muted">+{len(tokens) - len(shown_tokens)}</span>'
+
+    head_count = min(values["heads"], 16)
+    head_dots = "".join('<span class="head-dot"></span>' for _ in range(head_count))
+    if values["heads"] > head_count:
+        head_dots += f'<span class="head-more">+{values["heads"] - head_count}</span>'
+
+    layer_cards = []
+    for index in range(values["layers"]):
+        layer_cards.append(
+            '<div class="layer-card">'
+            f'<div class="layer-title">Bloc {index + 1}</div>'
+            f'<div class="head-dots" aria-label="{values["heads"]} têtes">{head_dots}</div>'
+            '<div class="layer-ops"><span>Attention</span><span>MLP ×4</span></div>'
+            '</div>'
+        )
+
+    n_tokens = len(tokens)
+    active_attention = n_tokens * (n_tokens + 1) // 2
+    total_attention = n_tokens * n_tokens
+    return f"""
+    <div class="architecture" aria-label="Schéma du Transformer simulé">
+      <div class="architecture-stats">
+        <div><span>Tokens</span><strong>{n_tokens}</strong></div>
+        <div><span>d_model</span><strong>{values['embedding_dim']}</strong></div>
+        <div><span>d_head</span><strong>{values['head_dim']}</strong></div>
+        <div><span>Paramètres estimés</span><strong>{_compact_number(values['estimated_parameters'])}</strong></div>
+      </div>
+      <div class="architecture-flow">
+        <div class="flow-node token-node"><b>Tokens</b><div class="arch-tokens">{token_html}</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><b>Embeddings</b><small>{n_tokens} × {values['embedding_dim']}</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node active-node"><b>{values['layers']} blocs Transformer</b><small>{values['heads']} têtes × {values['head_dim']} dimensions</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node"><b>Logits</b><small>{values['vocab_size']:,} scores</small></div>
+      </div>
+      <div class="layer-grid">{''.join(layer_cards)}</div>
+      <div class="causal-summary">
+        Attention causale : <strong>{n_tokens} × {n_tokens}</strong> cases par tête,
+        dont <strong>{active_attention}/{total_attention}</strong> accessibles.
+        Contexte maximal choisi : <strong>{values['context']}</strong> tokens.
+      </div>
+    </div>
+    """
+
+
+def process_animation(
+    text: str,
+    num_layers: int,
+    num_heads: int,
+    head_dim: int,
+    context_length: int,
+) -> str:
+    values = _architecture_values(text, num_layers, num_heads, head_dim, context_length)
+    shown_tokens = values["tokens"][:10]
+    run_id = time.monotonic_ns()
+
+    def animated_tokens(stage: int, suffix: str = "") -> str:
+        return "".join(
+            f'<span class="process-token" style="--token:{index};--stage:{stage}">{escape(token)}{suffix}</span>'
+            for index, token in enumerate(shown_tokens)
+        )
+
+    stages = [
+        ("1", "Tokenisation", animated_tokens(0), f"{len(values['tokens'])} unités"),
+        ("2", "Embeddings", animated_tokens(1, "⃗"), f"vecteurs de {values['embedding_dim']} nombres"),
+        ("3", "Attention Q/K/V", animated_tokens(2), f"{values['heads']} regards parallèles"),
+        ("4", "Blocs Transformer", animated_tokens(3), f"répété {values['layers']} fois"),
+        ("5", "Logits", '<span class="process-token prediction" style="--token:0;--stage:4">prochain token ?</span>', f"{values['vocab_size']:,} possibilités"),
+    ]
+    stage_html = "".join(
+        f"""
+        <div class="process-stage" style="--stage:{index}">
+          <div class="stage-number">{number}</div>
+          <div class="stage-copy"><b>{title}</b><small>{detail}</small></div>
+          <div class="stage-token-line">{content}</div>
+        </div>
+        {('<div class="process-connector" style="--stage:' + str(index) + '"><span>↓</span></div>') if index < len(stages) - 1 else ''}
+        """
+        for index, (number, title, content, detail) in enumerate(stages)
+    )
+    return f"""
+    <div class="process-animation" data-run="{run_id}" aria-label="Animation du traitement de la phrase">
+      <div class="animation-title"><b>La phrase traverse le modèle</b><span>L’animation se joue une fois à chaque clic.</span></div>
+      {stage_html}
+    </div>
+    """
+
+
 CSS = """
 :root { --bg:#f7f9fc; --ink:#172033; --muted:#68758a; --accent:#2563eb; --line:#dbe3ef; }
 .gradio-container { max-width:1180px !important; background:var(--bg); }
@@ -210,6 +355,59 @@ CSS = """
 .gradio-container [data-testid="accordion-content"] .prose strong { color: #eef2f7 !important; }
 .gradio-container button[role="tab"] { color: var(--ink) !important; opacity: 1 !important; }
 .gradio-container button[role="tab"][aria-selected="false"] { color: #526178 !important; }
+.architecture { color:var(--ink); padding:4px 2px 12px; }
+.architecture-stats { display:grid; grid-template-columns:repeat(4,minmax(110px,1fr)); gap:10px; margin-bottom:16px; }
+.architecture-stats div { background:white; border:1px solid var(--line); border-radius:12px; padding:11px 13px; }
+.architecture-stats span { color:var(--muted); display:block; font-size:12px; }
+.architecture-stats strong { display:block; font-size:20px; margin-top:2px; }
+.architecture-flow { display:flex; align-items:stretch; gap:8px; margin:4px 0 16px; }
+.flow-node { background:white; border:1px solid var(--line); border-radius:13px; padding:12px; min-height:72px; flex:1; display:flex; flex-direction:column; justify-content:center; }
+.flow-node.active-node { border-color:#82aaff; background:#edf4ff; }
+.flow-node b { color:var(--ink) !important; }
+.flow-node small { color:var(--muted); display:block; margin-top:4px; }
+.flow-arrow { align-self:center; color:#8fa0b8; font-size:22px; }
+.token-node { flex:1.35; }
+.arch-tokens { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.arch-token { background:#e8efff; color:#19459b; border-radius:6px; padding:2px 6px; font:12px ui-monospace,SFMono-Regular,Consolas,monospace; }
+.arch-token.muted { color:var(--muted); background:#edf0f5; }
+.layer-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:8px; }
+.layer-card { background:#172033; color:#eef4ff; border-radius:11px; padding:10px; min-height:82px; }
+.layer-title { color:#eef4ff; font-weight:700; margin-bottom:7px; }
+.head-dots { display:flex; flex-wrap:wrap; gap:4px; min-height:15px; align-items:center; }
+.head-dot { width:7px; height:7px; background:#73a4ff; border-radius:50%; box-shadow:0 0 7px rgba(115,164,255,.65); }
+.head-more { font-size:10px; color:#b9cdf7; }
+.layer-ops { display:flex; gap:5px; margin-top:8px; }
+.layer-ops span { background:#29364d; border-radius:5px; padding:3px 5px; font-size:10px; }
+.causal-summary { color:var(--muted); margin-top:12px; }
+.causal-summary strong { color:var(--ink); }
+.process-animation { color:var(--ink); margin-top:14px; padding:16px; background:white; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.animation-title { display:flex; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.animation-title b,.stage-copy b { color:var(--ink) !important; }
+.animation-title span { color:var(--muted); font-size:12px; }
+.process-stage { display:grid; grid-template-columns:34px 170px 1fr; align-items:center; gap:10px; min-height:60px; animation:stage-pass .8s ease-out both; animation-delay:calc(var(--stage) * .9s); }
+.stage-number { width:30px; height:30px; display:grid; place-items:center; border-radius:50%; background:#e8efff; color:#1d55c6; font-weight:700; }
+.stage-copy b,.stage-copy small { display:block; }
+.stage-copy small { color:var(--muted); margin-top:2px; }
+.stage-token-line { display:flex; flex-wrap:wrap; gap:5px; min-height:28px; align-items:center; }
+.process-token { background:#2563eb; color:white; border-radius:7px; padding:4px 7px; font:12px ui-monospace,SFMono-Regular,Consolas,monospace; opacity:0; transform:translateX(-14px) scale(.92); animation:token-arrive .48s ease-out forwards; animation-delay:calc(var(--stage) * .9s + var(--token) * .07s + .12s); }
+.process-token.prediction { background:#7c3aed; }
+.process-connector { height:15px; margin-left:14px; color:#7a8ba4; opacity:0; animation:connector-pass .35s ease-out forwards; animation-delay:calc(var(--stage) * .9s + .7s); }
+@keyframes stage-pass {
+  from { transform:translateX(-8px); background:rgba(37,99,235,.07); }
+  to { transform:translateX(0); background:transparent; }
+}
+@keyframes token-arrive { to { opacity:1; transform:translateX(0) scale(1); box-shadow:0 4px 12px rgba(37,99,235,.22); } }
+@keyframes connector-pass { to { opacity:1; transform:translateY(3px); } }
+@media (max-width:760px) {
+  .architecture-stats { grid-template-columns:repeat(2,minmax(100px,1fr)); }
+  .architecture-flow { flex-direction:column; }
+  .flow-arrow { transform:rotate(90deg); }
+  .process-stage { grid-template-columns:34px 1fr; }
+  .stage-token-line { grid-column:2; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .process-stage,.process-token,.process-connector { animation:none; opacity:1; transform:none; }
+}
 """
 
 
@@ -268,7 +466,29 @@ with gr.Blocks(title="GPT expliqué") as demo:
         cache_table = gr.Dataframe(interactive=False, label="Ce qui est recalculé et réutilisé")
         cache_button.click(kv_cache_view, [cache_input, cache_steps], [cache_table, cache_note])
         demo.load(kv_cache_view, [cache_input, cache_steps], [cache_table, cache_note])
-    with gr.Tab("5 · Comprendre"):
+    with gr.Tab("5 · Architecture animée"):
+        gr.Markdown(
+            "## Construis un Transformer et regarde la phrase le traverser\n"
+            "Les réglages modifient un **schéma simulé**. Les valeurs par défaut correspondent au petit GPT de ce dépôt."
+        )
+        with gr.Row():
+            with gr.Column(scale=1):
+                architecture_input = gr.Textbox(value="le chat mange la souris", label="Phrase traitée", lines=2)
+                architecture_layers = gr.Slider(1, 12, value=6, step=1, label="Nombre de couches")
+                architecture_heads = gr.Slider(1, 16, value=12, step=1, label="Têtes par couche")
+                architecture_head_dim = gr.Slider(8, 128, value=32, step=8, label="Dimension d’une tête")
+                architecture_context = gr.Slider(8, 128, value=32, step=8, label="Contexte maximal")
+                animation_button = gr.Button("▶ Relancer le parcours", variant="primary")
+            with gr.Column(scale=2):
+                architecture_html = gr.HTML()
+        animation_html = gr.HTML()
+        architecture_controls = [architecture_input, architecture_layers, architecture_heads, architecture_head_dim, architecture_context]
+        for architecture_control in architecture_controls:
+            architecture_control.change(architecture_view, architecture_controls, architecture_html, queue=False)
+        animation_button.click(process_animation, architecture_controls, animation_html, queue=False)
+        demo.load(architecture_view, architecture_controls, architecture_html)
+        demo.load(process_animation, architecture_controls, animation_html)
+    with gr.Tab("6 · Comprendre"):
         gr.Markdown("""
         ## Les notions visibles dans cette démo
 

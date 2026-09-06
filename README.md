@@ -11,7 +11,9 @@ python_version: "3.11"
 # GPT expliqué
 
 Une interface Gradio pour découvrir le petit GPT de ce dépôt : tokenisation,
-embeddings, attention causale Q/K/V et génération token par token.
+embeddings, attention causale Q/K/V et génération token par token. Un simulateur
+d'architecture fait varier couches, têtes, dimension et contexte, puis anime la
+phrase à travers les principales étapes du Transformer.
 
 ## Lancer localement avec Pixi
 
