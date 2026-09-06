@@ -18,5 +18,7 @@ dependencies:
   - pip:
       - datasets
       - nltk
+      - gradio>=5.0
+      - plotly>=5.20
+      - huggingface_hub>=0.25
 
-     

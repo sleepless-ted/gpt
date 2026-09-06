@@ -1,4 +1,6 @@
-*.txt
+# Keep source datasets out of Git while allowing dependency manifests.
+data/*.txt
 .vscode/
 __pycache__/
+.pixi/
 checkpoint.pt

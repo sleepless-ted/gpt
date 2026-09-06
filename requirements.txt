@@ -1,0 +1,4 @@
+gradio>=5.0
+plotly>=5.20
+pandas>=2.0
+huggingface_hub>=0.25
